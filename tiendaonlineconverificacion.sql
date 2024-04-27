@@ -42,14 +42,19 @@ CREATE TABLE subcategorias (
 
 CREATE TABLE productos (
     id_producto INT AUTO_INCREMENT PRIMARY KEY,
-    identidad_fabricante INT,
-    identidad_subcategoria INT,
+    identidad_fabricante INT NOT NULL,
+    identidad_subcategoria INT NOT NULL,
     nombre VARCHAR(50) UNIQUE,
     descripcion TEXT,
+    detalles VARCHAR(100),
     precio DECIMAL(7,2),
     stock INT,
     novedad BOOLEAN,
-    oferta BOOLEAN,
+    tipo_descuento ENUM('sin descuento', 'porcentual', 'absoluto') NOT NULL DEFAULT 'sin descuento',
+    descuento INT,
+    precio_aplicado_descuento DECIMAL(7, 2),
+	numero_valoraciones INT NOT NULL DEFAULT 0,
+    valoracion_media DOUBLE,
     fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (identidad_fabricante) REFERENCES fabricantes(id_fabricante),
@@ -61,6 +66,18 @@ CREATE TABLE imagenes (
     identidad_producto INT NOT NULL,
     imagen_url VARCHAR(100),
     FOREIGN KEY (identidad_producto) REFERENCES productos(id_producto)
+);
+
+CREATE TABLE resenas (
+    id_resena INT AUTO_INCREMENT PRIMARY KEY,
+    identidad_producto INT NOT NULL,
+    identidad_usuario INT NOT NULL,
+    valoracion INT,
+    titulo VARCHAR(100),
+    comentario VARCHAR(1000),
+    fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (identidad_producto) REFERENCES productos(id_producto),
+    FOREIGN KEY (identidad_usuario) REFERENCES usuarios(id_usuario)
 );
 
 CREATE TABLE pedidos (
@@ -149,6 +166,7 @@ INSERT INTO fabricantes(nombre, imagen_url) VALUES
     ('AW Custom', '/imagenes/fabricantes/armorer-works.jpg'),
     ('Delta Tactics', '/imagenes/fabricantes/delta-tactics.jpg'),
     ('Dual Code', '/imagenes/fabricantes/dual-code.jpg'),
+    ('G&G', '/imagenes/fabricantes/gg.jpg'),
     ('Krytac', '/imagenes/fabricantes/krytac.jpg'),
     ('Tokyo Marui', '/imagenes/fabricantes/tokyo-marui.jpg');
 
@@ -179,6 +197,14 @@ INSERT INTO subcategorias(identidad_categoria, nombre, imagen_url, descripcion) 
     (5, 'Motores', '/imagenes/subcategorias/nombre.jpg', 'Ofrecemos una amplia selección de motores de alta calidad, diseñados específicamente para réplicas de airsoft. Nuestros motores son potentes y eficientes, lo que resulta en una mayor velocidad de disparo y una mejor respuesta del gatillo. Además, también ofrecemos motores de diferentes tamaños y potencias para que puedas personalizar tu sistema según tus necesidades. Todos nuestros motores son fabricados con materiales duraderos y de alta calidad para garantizar un rendimiento óptimo y una larga vida útil.'),
     (5, 'Pistón y cabeza pistón', '/imagenes/subcategorias/nombre.jpg', 'Los pistones y cabeza de pistones de alta calidad mejoran el rendimiento de tu réplica de airsoft. Encontrarás pistones y cabezas de pistones para airsoft de diferentes materiales y diseños, desde pistones reforzados con dientes metálicos para una mayor durabilidad, hasta cabezas de pistón de aluminio y juntas tóricas para mejorar la estanqueidad y reducir la pérdida de aire.');
 
+INSERT INTO productos (identidad_fabricante, identidad_subcategoria, nombre, descripcion, detalles, precio, stock, novedad, tipo_descuento, descuento) VALUES
+    (1, 1, 'AK 47 ELÉCTRICA COLOR MADERA - CYMA', 'descripción', 'detalles', 69.95, 10, false, 'sin descuento', null),
+    (1, 1, 'Rifle Táctico M4 Spring con accesorios', 'descripción', 'detalles', 54.95, 10, false, 'sin descuento', null),
+    (1, 2, 'TOKYO MARUI MP7A1', 'descripción', 'detalles', 355.95, 10, false, 'sin descuento', null),
+    (1, 2, 'AEG ARP 9 G&G', 'descripcion', 'detalles', 259.95, 10, false, 'absoluto', 10),
+    (1, 3, 'PISTOLA SAIGO DEFENSE 1911 MUELLE', 'descripcion', 'detalles', 9.95, 10, false, 'sin descuento', 10),
+    (1, 3, 'Tokyo Marui FNX-45', 'descripcion', 'detalles', 189.99, 0, false, 'sin descuento', 0);
+    
 INSERT INTO usuarios (nombre, apellido1, apellido2, password, direccion_email, active, otp, fecha_generacion_otp) VALUES
     ('Alfredo', 'Landa', 'Areta', 'alflanare', 'alflanare@example.com', true, '000000', CURRENT_TIMESTAMP),
     ('Antonio', 'Ozores', 'Puchol', 'antozopuc', 'antozopuc@example.com', true, '000000', CURRENT_TIMESTAMP),
