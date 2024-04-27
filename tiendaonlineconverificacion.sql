@@ -44,15 +44,16 @@ CREATE TABLE productos (
     id_producto INT AUTO_INCREMENT PRIMARY KEY,
     identidad_fabricante INT NOT NULL,
     identidad_subcategoria INT NOT NULL,
-    nombre VARCHAR(50) UNIQUE,
+    nombre VARCHAR(60) UNIQUE,
     descripcion TEXT,
     detalles VARCHAR(100),
     precio DECIMAL(7,2),
     stock INT,
     novedad BOOLEAN,
     tipo_descuento ENUM('sin descuento', 'porcentual', 'absoluto') NOT NULL DEFAULT 'sin descuento',
-    descuento INT,
-    precio_aplicado_descuento DECIMAL(7, 2),
+    descuento INT DEFAULT NULL,
+    /*Precio después de aplicar el descuento, caso de que existe*/
+    precio_final DECIMAL(7, 2),
 	numero_valoraciones INT NOT NULL DEFAULT 0,
     valoracion_media DOUBLE,
     fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -161,14 +162,17 @@ INSERT INTO categorias(nombre, imagen_url, descripcion) value
     'Los "elementos internos" se refieren a las partes y componentes que están dentro de la réplica de arma y que son esenciales para su funcionamiento. Estos 
     incluyen varios sistemas y piezas que influyen en el rendimiento del arma, como la precisión, la potencia y la fiabilidad.');
 
-INSERT INTO fabricantes(nombre, imagen_url) VALUES
-    ('Ares', '/imagenes/fabricantes/ares.jpg'),
-    ('AW Custom', '/imagenes/fabricantes/armorer-works.jpg'),
-    ('Delta Tactics', '/imagenes/fabricantes/delta-tactics.jpg'),
-    ('Dual Code', '/imagenes/fabricantes/dual-code.jpg'),
-    ('G&G', '/imagenes/fabricantes/gg.jpg'),
-    ('Krytac', '/imagenes/fabricantes/krytac.jpg'),
-    ('Tokyo Marui', '/imagenes/fabricantes/tokyo-marui.jpg');
+INSERT INTO fabricantes(nombre, descripcion, imagen_url) VALUES
+    ('Ares Amoeba', 'descripcion', '/imagenes/fabricantes/ares.jpg'),
+    ('Delta Tactics', 'descripcion', '/imagenes/fabricantes/delta-tactics.jpg'),
+    ('Duel Code', 'descripcion', '/imagenes/fabricantes/dual-code.jpg'),
+    ('G&G', 'descripcion', '/imagenes/fabricantes/gg.jpg'),
+    ('Krytac', 'descripcion', '/imagenes/fabricantes/krytac.jpg'),
+    ('Lancer tactical', 'descripcion', '/imagenes/fabricantes/krytac.jpg'),
+    ('Nimrod', 'descripcion', '/imagenes/fabricantes/nimrod.jpg'),
+    ('Raccoon', 'descripcion', '/imagenes/fabricantes/raccoon.jpg'),
+    ('Saigo Defense', 'descripcion', '/imagenes/fabricantes/saigo-defense.jpg'),
+    ('Tokyo Marui', 'descripcion', '/imagenes/fabricantes/tokyo-marui.jpg');
 
 INSERT INTO subcategorias(identidad_categoria, nombre, imagen_url, descripcion) VALUES
     (1, 'fusiles', '/imagenes/subcategorias/fusiles.jpg', 'Los fusiles de airsoft son la elección ideal para todo tipo de partidas de airsoft, ya que son las armas más versátiles, convirtiéndose
@@ -178,10 +182,10 @@ INSERT INTO subcategorias(identidad_categoria, nombre, imagen_url, descripcion) 
     (1, 'escopetas', '/imagenes/subcategorias/escopetas.jpg', 'Las escopetas Airsoft son una de las réplicas Airsoft más usadas por los jugadores a nivel mundial después de los rifles y las pistolas eléctricas. Estas escopetas de bolas son ideales para la simulación militar de un combate ordinario y también para aquellos que son aficionados a las actividades de enfrentamiento. Por lo general, son empleadas como una herramienta de defensa en contra del enemigo que está atacando durante la duración del juego.Estas escopetas de Airsoft son un tipo de arma por lo general largas (también existen los cañones cortos) y utilizadas como arma principal del juego por su jugador. Es un arma con mayor alcance de todas las que se pueden utilizar y cuenta con mayor atracción de manera visual para muchos de los jugadores. Este tipo de escopeta para Airsoft es de las preferidas por aquellos jugadores que tienen el papel de fusileros. Esto se debe a su gran parecido con las armas reales y por el gran tamaño que pueden tener. Puedes conseguir una gran cantidad de escopetas de bolas que son réplicas de las reales y puede ser usadas por jugadores expertos del Airsoft y también por los novatos en el área, así que no te preocupes y disfruta de tu escopeta de bolas.'),
     (1, 'francotiradores', '/imagenes/subcategorias/francotiradores.jpg', 'Los francotiradores Airsoft juegan un papel muy importante dentro de este juego. Son jugadores que tienen que contar con mucha paciencia, inteligencia y a su vez una puntería increíble. Si tienes estas características principales, quiere decir que puedes ser excelente con los rifles para francotiradores en este juego que ha revolucionado al mundo entero desde su creación en Japón. La función principal de los francotiradores de Airsoft es ofrecerle protección a su equipo. Una tarea que se hace por medio de la observación de inteligencia y eliminando a los jugadores del equipo contrario con disparos realizados a larga distancia con diversas armas. Su objetivo es abatir a determinados jugadores del equipo contrario que pueden ser una amenaza para sus compañeros. Al realizar este tipo de disparos, los francotiradores logran que el equipo contrario quede con bajas y con movimientos limitados, por lo que consiguen una mejor penetración en terreno enemigo.'),
     (2, 'bolas de airsoft', '/imagenes/subcategorias/bolas-bbs.jpg', 'Los balines de Airsoft (conocidos como BBs) son proyectiles esféricos utilizados por las armas de airsoft. Por lo general, están hechos de plástico, suelen medir alrededor de 6 mm (0,24 pulgadas) de diámetro (aunque algunos modelos usan 8 mm) y pesan entre 0,20 y 0,40 g (3,1 a 6,2 g), siendo los pesos más comunes 0,20 gy 0,25 g. , mientras que las bolas de 0,28 g, 0,30 g, 0,32 g y 0,40 g también son habituales. Aunque los usuarios de airsoft los conocen con frecuencia como "BBs", estos BBs no son los mismos que los proyectiles metálicos de 4,5 mm que disparan las pistolas de BB ni los perdigones de 4,6 mm (0,180 pulgadas) de los que se originó el término "BB".'),
-	(2, 'cargadores', '/imagenes/subcategorias/cargadores-pistola.jpg', 'un cargador es un dispositivo que almacena y alimenta las BBs (bolas de plástico que actúan como munición) a la réplica del arma. Es un componente crucial para el funcionamiento de las armas de airsoft, y su diseño y capacidad varían dependiendo del tipo de arma y del realismo deseado.'),
     (2, 'baterías y cargadores de batería', '/imagenes/subcategorias/baterias.jpg', 'En el airsoft, las baterías son utilizadas principalmente para alimentar las réplicas de armas eléctricas, conocidas como AEGs (Airsoft Electric Guns).'),
-    (2, 'granadas y lanzagranadas', '/imagenes/subcategorias/granadas-y-lanzagranadas.jpg', 'Las granadas de airsoft están diseñadas para simular el efecto y la funcionalidad de las granadas reales. A menudo se utilizan para limpiar habitaciones o despejar trincheras y otros espacios cerrados, permitiendo a los jugadores golpear a múltiples objetivos simultáneamente.'),
     (2, 'gas, co2 y mantenimiento', '/imagenes/subcategorias/gas-co2-y-mantenimiento.jpg', 'El gas y el CO2 son dos tipos de propelentes utilizados en las armas de airsoft para proporcionar la energía necesaria para disparar las BBs. Cada uno tiene características específicas y se utiliza en diferentes tipos de réplicas de armas. El lubricante ayuda a reducir la fricción entre las partes móviles del arma, como los engranajes en una AEG (Airsoft Electric Gun) o las partes móviles del mecanismo de blowback en armas de gas. Esto asegura un funcionamiento más suave y eficiente, lo que es crucial para la durabilidad del arma. Previene el Desgaste: Al disminuir la fricción, el lubricante también reduce el desgaste general de las partes móviles del arma. Esto es especialmente importante en componentes como pistones, cilindros y válvulas.'),
+    (2, 'granadas y lanzagranadas', '/imagenes/subcategorias/granadas-y-lanzagranadas.jpg', 'Las granadas de airsoft están diseñadas para simular el efecto y la funcionalidad de las granadas reales. A menudo se utilizan para limpiar habitaciones o despejar trincheras y otros espacios cerrados, permitiendo a los jugadores golpear a múltiples objetivos simultáneamente.'),
+    (2, 'cargadores', '/imagenes/subcategorias/cargadores-pistola.jpg', 'un cargador es un dispositivo que almacena y alimenta las BBs (bolas de plástico que actúan como munición) a la réplica del arma. Es un componente crucial para el funcionamiento de las armas de airsoft, y su diseño y capacidad varían dependiendo del tipo de arma y del realismo deseado.'),
     (3, 'miras y red dot', '/imagenes/subcategorias/nombre.jpg', 'Las miras y red dot son son un accesorio airsoft complementario de cada uno de los jugadores. Permiten tener una pequeña ventaja sobre el adversario, ya que nos ayuda a visualizar y apuntar más rápido a grandes distancias'),
     (3, 'correas y landyards', '/imagenes/subcategorias/nombre.jpg', 'Las correas habilitan al jugador a utilizar sus manos en otras labores mientras su réplica primaria cuelga sin perderse.  El lanyard es una cuerda o cordón que se coloca alrededor del cuello y permite colgar complementos y accesorios airsoft.'),
     (3, 'monturas y raíles', '/imagenes/subcategorias/nombre.jpg', 'Las monturas y raíles para Airsoft son ampliamente utilizadas en este deporte ya que ayudan a colocar cualquier accesorio a nuestra replica. Es decir, nos permite colocar: teléfonos, cámaras, miras, linternas o cualquier objeto que nos ayudará a un mejor desempeño en el campo de batalla.'),
@@ -197,14 +201,37 @@ INSERT INTO subcategorias(identidad_categoria, nombre, imagen_url, descripcion) 
     (5, 'Motores', '/imagenes/subcategorias/nombre.jpg', 'Ofrecemos una amplia selección de motores de alta calidad, diseñados específicamente para réplicas de airsoft. Nuestros motores son potentes y eficientes, lo que resulta en una mayor velocidad de disparo y una mejor respuesta del gatillo. Además, también ofrecemos motores de diferentes tamaños y potencias para que puedas personalizar tu sistema según tus necesidades. Todos nuestros motores son fabricados con materiales duraderos y de alta calidad para garantizar un rendimiento óptimo y una larga vida útil.'),
     (5, 'Pistón y cabeza pistón', '/imagenes/subcategorias/nombre.jpg', 'Los pistones y cabeza de pistones de alta calidad mejoran el rendimiento de tu réplica de airsoft. Encontrarás pistones y cabezas de pistones para airsoft de diferentes materiales y diseños, desde pistones reforzados con dientes metálicos para una mayor durabilidad, hasta cabezas de pistón de aluminio y juntas tóricas para mejorar la estanqueidad y reducir la pérdida de aire.');
 
-INSERT INTO productos (identidad_fabricante, identidad_subcategoria, nombre, descripcion, detalles, precio, stock, novedad, tipo_descuento, descuento) VALUES
-    (1, 1, 'AK 47 ELÉCTRICA COLOR MADERA - CYMA', 'descripción', 'detalles', 69.95, 10, false, 'sin descuento', null),
-    (1, 1, 'Rifle Táctico M4 Spring con accesorios', 'descripción', 'detalles', 54.95, 10, false, 'sin descuento', null),
-    (1, 2, 'TOKYO MARUI MP7A1', 'descripción', 'detalles', 355.95, 10, false, 'sin descuento', null),
-    (1, 2, 'AEG ARP 9 G&G', 'descripcion', 'detalles', 259.95, 10, false, 'absoluto', 10),
-    (1, 3, 'PISTOLA SAIGO DEFENSE 1911 MUELLE', 'descripcion', 'detalles', 9.95, 10, false, 'sin descuento', 10),
-    (1, 3, 'Tokyo Marui FNX-45', 'descripcion', 'detalles', 189.99, 0, false, 'sin descuento', 0);
+INSERT INTO productos (identidad_fabricante, identidad_subcategoria, nombre, descripcion, detalles, precio, stock, novedad) VALUES
+    (1, 1, 'Ares Amoeba fusil M4 Ris CG 10"AM-008', 'descripción', 'detalles', 189.95, 10, false),
+    (6, 1, 'RÉPLICA LT-25 G2 M4 SPR - GRIS', 'descripción', 'detalles', 179.95, 10, false),
+    (10, 2, 'TOKYO MARUI MP7A1', 'descripción', 'detalles', 355.95, 10, false),
+    (9, 3, 'PISTOLA SAIGO DEFENSE 1911 MUELLE', 'descripcion', 'detalles', 9.95, 10, false),
+    (10, 3, 'Tokyo Marui FNX-45', 'descripcion', 'detalles', 189.99, 0, false),
+    (8, 6, 'RACCOON PREMIUM BIO BBS - 0.25g 1kg', 'descripcion', 'detalles', 15.50, 30, false),
+    (8, 6, 'Bola RACCOON BIO 0.28G Extreme Precision 1KG', 'descripcion', 'detalles', 11.95, 50, false),
+    (3, 7, 'BATERIA LI-PO 11.1V 800MAH 15C T-DEAN DUEL CODE', 'descripcion', 'detalles', 15.95, 50, false),
+    (3, 7, 'CARGADOR BALANCEADOR LIPO 2-3 CELDAS 7.4V/11.1V DUEL CODE', 'descripcion', 'detalles', 18.95, 10, false),
+    (7, 8, 'Gas Standard Performance Green (10KG) 500ml - NIMROD', 'descripcion', 'detalles', 9.90, 30, false),
+    (7, 8, 'Gas Professional Performance Red (12kg) 500ml - NIMROD', 'descripcion', 'detalles', 11.90, 30, false),
+    (9, 9, 'GRANADA KAMIKAZE XS NEGRA - SAIGO DEFENSE', 'descripcion', 'detalles', 89.95, 30, false),
+    (9, 9, 'GRANADA KAMIKAZE XS GOLD - SAIGO DEFENSE', 'descripcion', 'detalles', 119.50, 30, false),
+    (9, 10, 'CARGADOR MK1 CO2 23 RDS - SAIGO DEFENSE', 'descripcion', 'detalles', 34.95, 30, false),
+    (10, 10, 'Cargador MP7 Marui GBB', 'descripcion', 'detalles', 54.95, 30, false),
+    (5, 14, 'LÁSER ROJO TÁCTICO (JS-JG8R) - JS', 'descripcion', 'detalles', 17.95, 30, false),
+    (2, 14, 'LINTERNA MOD T04 - DELTA TACTICS', 'descripcion', 'detalles', 43.50, 30, false);
     
+/*Productos nuevos*/
+INSERT INTO productos (identidad_fabricante, identidad_subcategoria, nombre, descripcion, detalles, precio, stock, novedad) VALUES
+    (4, 8, 'MIRA PUNTO ROJO Y VERDE COMPAC NEGRA - DUEL CODE', 'descripcion', 'detalles', 48.95, 30, true),
+    (5, 8, 'FRANCOTIRADOR DE CO2 M1903 A3 - G&G', 'descripcion', 'detalles', 584.90, 5, true),
+    (10, 1, 'TOKYO MARUI SAIGA-12K', 'descripción', 'detalles', 589.95, 10, true);
+    
+/*Productos con descuento*/
+INSERT INTO productos (identidad_fabricante, identidad_subcategoria, nombre, descripcion, detalles, precio, stock, novedad, tipo_descuento, descuento) VALUES
+    (4, 2, 'AEG ARP 9 G&G', 'descripcion', 'detalles', 269.95, 10, false, 'absoluto', 10),
+    (4, 20, 'Cámara Hop Up RK - G&G', 'descripcion', 'detalles', 37.95, 10, false, 'absoluto', 4),
+    (9, 2, 'Subfusil UCI 35', 'descripcion', 'detalles', 269.95, 10, false, 'porcentual', 10);
+
 INSERT INTO usuarios (nombre, apellido1, apellido2, password, direccion_email, active, otp, fecha_generacion_otp) VALUES
     ('Alfredo', 'Landa', 'Areta', 'alflanare', 'alflanare@example.com', true, '000000', CURRENT_TIMESTAMP),
     ('Antonio', 'Ozores', 'Puchol', 'antozopuc', 'antozopuc@example.com', true, '000000', CURRENT_TIMESTAMP),
@@ -216,6 +243,8 @@ INSERT INTO usuarios (nombre, apellido1, apellido2, password, direccion_email, a
     ('Fernando', 'Fernández', 'Gómez', 'ferfergom', 'ferfergom@sqlmail.com', true, '000000', CURRENT_TIMESTAMP),
     ('Florinda', 'Chico', 'Martín-Mora', 'flochimar-mor', 'flochim-m@sqlmail.com', true, '000000', CURRENT_TIMESTAMP);
 
+
+
 INSERT INTO pedidos (identidad_usuario, nombre, apellidos, direccion, pais, ciudad, numero_telefono_movil, fecha_pedido, precio_total, estado) VALUES
     (1, 'Alfredo', 'Landa', 'direccion AL', 'España', 'Pamplona', '+346XXXXXXXX', '2024-04-01', 60, 'entregado'),
     (1, 'Alfredo', 'Landa', 'direccion AL', 'España', 'Pamplona', '+346XXXXXXXX', '2024-04-01', 60, 'cancelado'),
@@ -226,7 +255,7 @@ INSERT INTO pedidos (identidad_usuario, nombre, apellidos, direccion, pais, ciud
     (5, 'Concepción', 'Velasco', 'direccion CV', 'España', 'Valladolid', '+346XXXXXXXX', '2024-04-07', 30, 'enviado'),
     (6, 'Ramiro', 'Pacheco', 'direccion RP', 'España', 'Madrid', '+346XXXXXXXX', '2024-04-07', 120, 'entregado'),
     (7, 'Francisco', 'Rabal', 'direccion FR', 'España', 'Águilas', '+346XXXXXXXX', '2024-04-09', 25, 'enviado'),
-    (1, 'Agustín', 'Romero', 'direccion AR', 'España', 'Segovia', '+346XXXXXXXX', '2024-04-15', 120, 'pendiente'),
+    (1, 'Alfredo', 'Landa', 'direccion AL', 'España', 'Pamplona', '+346XXXXXXXX', '2024-04-15', 120, 'pendiente'),
     (5, 'Nuria', 'Berenguer', 'direccion NB', 'España', 'Gerona', '+346XXXXXXXX', '2024-04-16', 30, 'pendiente');
 
 /*Recordar identidad_pedido es único*/
