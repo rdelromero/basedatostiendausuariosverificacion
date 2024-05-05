@@ -12,8 +12,10 @@ CREATE TABLE categorias (
 CREATE TABLE fabricantes (
     id_fabricante INT AUTO_INCREMENT PRIMARY KEY,
     nombre VARCHAR(50),
+	fecha_fundacion DATE,
+    pais VARCHAR(50),
+    pagina_web VARCHAR(50),
     imagen_url VARCHAR(100) NOT NULL,
-    fecha_fundacion DATE,
     descripcion TEXT
 );
 
@@ -45,13 +47,13 @@ CREATE TABLE productos (
     identidad_fabricante INT NOT NULL,
     identidad_subcategoria INT NOT NULL,
     nombre VARCHAR(75) UNIQUE,
-    descripcion TEXT,
+    descripcion TEXT,                                    
     detalles VARCHAR(100),
     precio DECIMAL(7,2),
-    stock INT,
+    stock INT UNSIGNED,
     novedad BOOLEAN,
-    tipo_descuento ENUM('sin descuento', 'porcentual', 'absoluto') NOT NULL DEFAULT 'sin descuento',
-    descuento INT DEFAULT NULL,
+    tipo_descuento ENUM('sin_descuento', 'porcentual', 'absoluto') NOT NULL DEFAULT 'sin_descuento',
+    descuento DECIMAL(5,2) DEFAULT NULL,
     /*Precio después de aplicar el descuento, caso de que existe*/
     precio_final DECIMAL(7, 2),
 	numero_valoraciones INT NOT NULL DEFAULT 0,
@@ -86,7 +88,10 @@ CREATE TABLE pedidos (
     identidad_usuario INT,
     fecha_pedido TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     /*precio_total se calculará será la suma de los precio_linea de la linea_facturacion para el id_pedido en cuestión*/
-	precio_total DECIMAL(8, 2),
+	precio_subtotal DECIMAL(8, 2),
+    metodo_envio ENUM('Recogida_en_tienda', 'CTT_Express', 'NACEX') NOT NULL DEFAULT 'CTT_Express',
+    gastos_envio DECIMAL(4, 2), /*gastos_envio depende de precio_subtotal y metodo_envio*/
+    precio_total DECIMAL(8, 2),
     estado ENUM('pendiente', 'enviado', 'entregado', 'cancelado') NOT NULL DEFAULT 'pendiente',
     /*Datos del destinatario*/
 	nombre VARCHAR(30) NOT NULL,
@@ -105,27 +110,28 @@ CREATE TABLE linea_facturacion (
     identidad_pedido INT,
     identidad_producto INT,
     cantidad INT NOT NULL CHECK (cantidad >= 1),
+    estado ENUM('activo', 'cancelado') DEFAULT 'activo',
     /*El precio_linea = precio del producto*cantidad*/
-    precio_unitario DECIMAL(7, 2),
+    precio_unitario DECIMAL(7, 2) NOT NULL,
     precio_linea DECIMAL(7, 2) NOT NULL,
     UNIQUE (identidad_pedido, identidad_producto),
-    FOREIGN KEY (identidad_pedido) REFERENCES pedidos(id_pedido) ON DELETE CASCADE,
-    FOREIGN KEY (identidad_producto) REFERENCES productos(id_producto) ON DELETE CASCADE
+    FOREIGN KEY (identidad_pedido) REFERENCES pedidos(id_pedido),
+    FOREIGN KEY (identidad_producto) REFERENCES productos(id_producto)
 );
 
 CREATE TABLE envios (
     id_envio INT AUTO_INCREMENT PRIMARY KEY,
-    identidad_pedido INT UNIQUE, /*Podríamos reconsiderar que no fuese UNIQUE para permitir más de un envío por pedido (por haber resultado los anteriores fallidos o estar su contenido incompleto);*/
+    identidad_pedido INT, /*Consideramos que no es UNIQUE para permitir más de un envío por pedido (por haber resultado los anteriores fallidos o estar su contenido incompleto);*/
     fecha_envio TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    entregado BOOLEAN,
     fecha_entrega DATETIME,
     numero_documento_identidad_receptor VARCHAR(20),
+    fecha_entrega_vuelta_almacen DATETIME,
     comentario VARCHAR(150), /*P. ej. si ha habido varios intentos de entrega*/
     fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (identidad_pedido) REFERENCES pedidos(id_pedido)
 );
 
-/*Tabla productos: precio_final al insertar nuevo producto*/
+/*Tabla productos: Al insertar un nuevo producto, a partir de precio y descuento se calcula su precio_final*/
 DELIMITER $$
 CREATE TRIGGER before_insert_productos
 BEFORE INSERT ON productos
@@ -141,7 +147,7 @@ BEGIN
 END$$
 DELIMITER ;
 
-/*Tabla productos: Recálculo de la valoración media de un producto al insertar una nueva reseña*/
+/*Tabla productos: Al insertar una nueva reseña se recalcula la valoracion_media del producto al que hace referencia*/
 DELIMITER $$
 CREATE TRIGGER actualizar_valoracion_media_after_insert
 AFTER INSERT ON resenas
@@ -156,7 +162,7 @@ BEGIN
 END$$
 DELIMITER ;
 
-/*Tabla linea_facturacion al insertar: Calculo de precio_linea*/
+/*Tabla linea_facturacion: al insertar una nueva línea de facturación se calcula automáticamente precio_linea*/
 DELIMITER $$
 CREATE TRIGGER before_insert_linea_facturacion
 BEFORE INSERT ON linea_facturacion
@@ -166,24 +172,79 @@ BEGIN
     SELECT precio_final INTO @precio_unitario
     FROM productos
     WHERE id_producto = NEW.identidad_producto;
-
     -- Establecer precio unitario y calcular precio línea
     SET NEW.precio_unitario = @precio_unitario;
     SET NEW.precio_linea = NEW.precio_unitario * NEW.cantidad;
 END$$
 DELIMITER ;
 
-/*Tabla pedidos al insertar un registro en la tabla linea_facturacion: recálculo de precio_total*/
+/*Tabla productos: Insertar una linea_facturacion implica una actualización del stock de ese producto*/
+DELIMITER $$
+CREATE TRIGGER after_insert_linea_facturacion_reduce_stock
+AFTER INSERT ON linea_facturacion
+FOR EACH ROW
+BEGIN
+    UPDATE productos
+    SET stock = stock - NEW.cantidad
+    WHERE id_producto = NEW.identidad_producto;
+END$$
+DELIMITER ;
+
+/*Tabla pedidos: al insertar un registro en la tabla linea_facturacion: recálculo de precio_subtotal*/
 DELIMITER $$
 CREATE TRIGGER after_lineafacturacion_insert
 AFTER INSERT ON linea_facturacion
 FOR EACH ROW
 BEGIN
     UPDATE pedidos
-    SET precio_total = (SELECT SUM(precio_linea) FROM linea_facturacion WHERE identidad_pedido = NEW.identidad_pedido)
+    SET precio_subtotal = (SELECT SUM(precio_linea) FROM linea_facturacion WHERE identidad_pedido = NEW.identidad_pedido)
+    WHERE id_pedido = NEW.identidad_pedido;
+    
+    UPDATE pedidos
+    SET gastos_envio = CASE
+                            WHEN metodo_envio = 'Recogida_en_tienda' THEN 0
+                            WHEN metodo_envio = 'CTT_Express' AND precio_subtotal < 80 THEN 4.95
+                            WHEN metodo_envio = 'CTT_Express' AND precio_subtotal >= 80 THEN 0
+                            WHEN metodo_envio = 'NACEX' AND precio_subtotal < 80 THEN 5.99
+                            WHEN metodo_envio = 'NACEX' AND precio_subtotal >= 80 THEN 3.60
+                            ELSE 0 -- default
+                       END
+    WHERE id_pedido = NEW.identidad_pedido;
+
+    UPDATE pedidos
+    SET precio_total = precio_subtotal + gastos_envio
+    WHERE id_pedido = NEW.identidad_pedido;
+
+END$$
+DELIMITER ;
+
+/*Tabla pedidos. Al pasar a estar un pedido enviado el campo estado de ese pedido pasa a ser enviado*/
+DELIMITER $$
+CREATE TRIGGER update_pedido_status_after_envio
+AFTER INSERT ON envios
+FOR EACH ROW
+BEGIN
+    UPDATE pedidos
+    SET estado = 'enviado'
     WHERE id_pedido = NEW.identidad_pedido;
 END$$
 DELIMITER ;
+
+/*Normalmente, MySQL no permite que un trigger actualice la misma tabla que activó el trigger para evitar la recursión*/
+/*DELIMITER $$
+CREATE TRIGGER update_pedido_status_to_entregado_on_update2
+BEFORE INSERT ON envios
+FOR EACH ROW
+BEGIN
+    -- Obtener el precio final del producto relacionado
+    SELECT precio_final INTO @precio_unitario
+    FROM productos
+    WHERE id_producto = NEW.identidad_producto;
+    -- Establecer precio unitario y calcular precio línea
+    SET NEW.precio_unitario = @precio_unitario;
+    SET NEW.precio_linea = NEW.precio_unitario * NEW.cantidad;
+END$$
+DELIMITER ;*/
 
 INSERT INTO categorias(nombre, imagen_url, descripcion) value
     ('Armas airsoft', 
@@ -223,17 +284,17 @@ INSERT INTO categorias(nombre, imagen_url, descripcion) value
     'Los "elementos internos" se refieren a las partes y componentes que están dentro de la réplica de arma y que son esenciales para su funcionamiento. Estos 
     incluyen varios sistemas y piezas que influyen en el rendimiento del arma, como la precisión, la potencia y la fiabilidad.');
 
-INSERT INTO fabricantes(nombre, descripcion, imagen_url) VALUES
-    ('Ares Amoeba', 'descripcion', '/imagenes/fabricantes/ares.jpg'),
-    ('DBOYS', 'descripcion', '/imagenes/fabricantes/dboys.jpg'),
-    ('Delta Tactics', 'descripcion', '/imagenes/fabricantes/delta-tactics.jpg'),
-    ('Duel Code', 'descripcion', '/imagenes/fabricantes/dual-code.jpg'),
-    ('G&G', 'descripcion', '/imagenes/fabricantes/gg.jpg'),
-    ('Krytac', 'descripcion', '/imagenes/fabricantes/krytac.jpg'),
-    ('Lancer tactical', 'descripcion', '/imagenes/fabricantes/krytac.jpg'),
-    ('Nimrod', 'descripcion', '/imagenes/fabricantes/nimrod.jpg'),
-    ('Saigo Defense', 'descripcion', '/imagenes/fabricantes/saigo-defense.jpg'),
-    ('Tokyo Marui', 'descripcion', '/imagenes/fabricantes/tokyo-marui.jpg');
+INSERT INTO fabricantes(nombre, pais, pagina_web, descripcion, imagen_url) VALUES
+    ('Ares Amoeba', 'China', 'https://www.amoeba-airsoft.com/', 'descripción', '/imagenes/fabricantes/ares.jpg'),
+    ('BO Manufacture', 'Francia', 'https://bomanufacture.com/', 'descripción', '/imagenes/fabricantes/ares.jpg'),
+    ('DBOYS', 'N/A', 'https://dboysguns.com/', 'descripción', '/imagenes/fabricantes/dboys.jpg'),
+    ('Duel Code', 'España', 'N/A', 'descripción', '/imagenes/fabricantes/dual-code.jpg'),
+    ('G&G', 'Taiwán', 'https://www.guay2.com/', 'descripción', '/imagenes/fabricantes/gg.jpg'),
+    ('Krytac', 'EE.UU', 'https://krytac.com/', 'descripción', '/imagenes/fabricantes/krytac.jpg'),
+    ('Lancer tactical', 'EE.UU', 'https://www.lancertactical.com/', 'descripción', '/imagenes/fabricantes/lancer-tactical.png'),
+    ('Nimrod', 'N/A', 'https://nimrodtactical.com/', 'descripción', '/imagenes/fabricantes/nimrod-tactical.jpg'),
+    ('Saigo Defense', 'España', 'N/A', 'descripción', '/imagenes/fabricantes/saigo-defense.jpg'),
+    ('Tokyo Marui', 'Japón', 'https://www.tokyo-marui.co.jp/', 'descripción', '/imagenes/fabricantes/tokyo-marui.jpg');
 
 INSERT INTO subcategorias(identidad_categoria, nombre, imagen_url, descripcion) VALUES
     (1, 'fusiles', '/imagenes/subcategorias/fusiles.jpg', 'Los fusiles de airsoft son la elección ideal para todo tipo de partidas de airsoft, ya que son las armas más versátiles, convirtiéndose
@@ -266,7 +327,7 @@ INSERT INTO productos (identidad_fabricante, identidad_subcategoria, nombre, des
     (5, 1, 'G&G RK47 IMITATION WOOD STOCK BLOWBACK', 'descripción', 'detalles', 210.40, 0, false),
     (1, 1, 'AMOEBA AM-008 M4-CQBR 7" TAN', 'descripción', 'detalles', 189.95, 10, false),
     (7, 1, 'Lancer Tactical LT-02C MK18 Pack', 'descripción', 'detalles', 144.90, 10, false),
-    (2, 1, 'DBOYS METÁLICA M4A1 (3681M) AEG', 'descripción', 'detalles', 195.00, 10, false),
+    (3, 1, 'DBOYS METÁLICA M4A1 (3681M) AEG', 'descripción', 'detalles', 195.00, 10, false),
     (10, 2, 'TOKYO MARUI MP7A1', 'descripción', 'detalles', 355.95, 10, false),
     (9, 3, 'PISTOLA SAIGO DEFENSE 1911 MUELLE', 'descripcion', 'detalles', 9.95, 10, false),
     (10, 3, 'Tokyo Marui FNX-45', 'descripcion', 'detalles', 189.99, 0, false),
@@ -282,7 +343,7 @@ INSERT INTO productos (identidad_fabricante, identidad_subcategoria, nombre, des
     (9, 10, 'CARGADOR MK1 CO2 23 RDS - SAIGO DEFENSE', 'descripcion', 'detalles', 34.95, 30, false),
     (10, 10, 'Cargador MP7 Marui GBB', 'descripcion', 'detalles', 54.95, 30, false),
     (4, 14, 'MIRA PUNTO ROJO G2 TAN - DUEL CODE', 'descripcion', 'detalles', 58.90, 30, false),
-    (3, 14, 'LINTERNA MOD T04 - DELTA TACTICS', 'descripcion', 'detalles', 43.50, 30, false);
+    (2, 14, 'LINTERNA BO PL350', 'descripcion', 'detalles', 74.95, 30, false);
 
 /*Productos nuevos*/
 INSERT INTO productos (identidad_fabricante, identidad_subcategoria, nombre, descripcion, detalles, precio, stock, novedad) VALUES
@@ -292,10 +353,10 @@ INSERT INTO productos (identidad_fabricante, identidad_subcategoria, nombre, des
     
 /*Productos con descuento*/
 INSERT INTO productos (identidad_fabricante, identidad_subcategoria, nombre, descripcion, detalles, precio, stock, novedad, tipo_descuento, descuento) VALUES
+    (9, 2, 'Subfusil UCI 35', 'descripcion', 'detalles', 269.95, 0, false, 'porcentual', 10),
     (5, 2, 'AEG ARP 9 G&G', 'descripcion', 'detalles', 269.95, 10, false, 'absoluto', 10),
-    (5, 20, 'Cámara Hop Up RK - G&G', 'descripcion', 'detalles', 37.95, 10, false, 'absoluto', 4),
-    (9, 2, 'Subfusil UCI 35', 'descripcion', 'detalles', 269.95, 10, false, 'porcentual', 10);
-
+    (5, 20, 'Cámara Hop Up RK - G&G', 'descripcion', 'detalles', 37.95, 10, false, 'absoluto', 4);
+    
 INSERT INTO usuarios (nombre, apellido1, apellido2, password, direccion_email, active, otp, fecha_generacion_otp) VALUES
     ('Alfredo', 'Landa', 'Areta', 'alflanare', 'alflanare@example.com', true, '000000', CURRENT_TIMESTAMP),
     ('Antonio', 'Ozores', 'Puchol', 'antozopuc', 'antozopuc@example.com', true, '000000', CURRENT_TIMESTAMP),
@@ -305,7 +366,8 @@ INSERT INTO usuarios (nombre, apellido1, apellido2, password, direccion_email, a
     ('Enrique', 'San Francisco', 'Cobo', 'enrsanfan', 'enrsfcob@sqlmail.com', true, '000000', CURRENT_TIMESTAMP),
     ('Francisco', 'Rabal', 'Valera', 'frarabval', 'frarabval@sqlmail.com', true, '000000', CURRENT_TIMESTAMP),
     ('Fernando', 'Fernández', 'Gómez', 'ferfergom', 'ferfergom@sqlmail.com', true, '000000', CURRENT_TIMESTAMP),
-    ('Florinda', 'Chico', 'Martín-Mora', 'flochimar-mor', 'flochim-m@sqlmail.com', true, '000000', CURRENT_TIMESTAMP);
+    ('Florinda', 'Chico', 'Martín-Mora', 'flochimar-mor', 'flochim-m@sqlmail.com', true, '000000', CURRENT_TIMESTAMP),
+    ('Ricardo', 'Deza', 'Roanes', 'ricdezroa', 'vivo_en_madrid@hotmail.com', true, '000000', CURRENT_TIMESTAMP);
 
 INSERT INTO resenas (identidad_producto, identidad_usuario, valoracion, titulo, comentario) VALUES
     (1, 1, 4, 'título', 'comentario'),
@@ -316,48 +378,106 @@ INSERT INTO resenas (identidad_producto, identidad_usuario, valoracion, titulo, 
 	(4, 7, 5, 'título', 'comentario'),
     (4, 8, 5, 'título', 'comentario'),
     (4, 9, 4, 'título', 'comentario');
-        
-INSERT INTO pedidos (identidad_usuario, nombre, apellidos, direccion, pais, ciudad, numero_telefono_movil, fecha_pedido, estado) VALUES
-    (1, 'Alfredo', 'Landa', 'direccion AL', 'España', 'Pamplona', '+346XXXXXXXX', '2024-04-01', 'entregado'),
-    (1, 'Alfredo', 'Landa', 'direccion AL', 'España', 'Pamplona', '+346XXXXXXXX', '2024-04-01', 'cancelado'),
-    (3, 'Amparo', 'Baró', 'direccion AB', 'España', 'Barcelona', '+346XXXXXXXX', '2024-04-02', 'entregado'),
-    (3, 'Amparo', 'Baró', 'direccion AB', 'España', 'Barcelona', '+346XXXXXXXX', '2024-04-03', 'entregado'),
-    (1, 'Germán', 'Areta', 'direccion GA', 'España', 'Madrid', '+346XXXXXXXX', '2024-04-04', 'entregado'),
-    (8, 'Miguel', 'Aguirrezabala', 'direccion CV', 'España', 'Azpeitia', '+346XXXXXXXX', '2024-04-05', 'cancelado'),
-    (5, 'Concepción', 'Velasco', 'direccion CV', 'España', 'Valladolid', '+346XXXXXXXX', '2024-04-07', 'enviado'),
-    (6, 'Ramiro', 'Pacheco', 'direccion RP', 'España', 'Madrid', '+346XXXXXXXX', '2024-04-07', 'entregado'),
-    (7, 'Francisco', 'Rabal', 'direccion FR', 'España', 'Águilas', '+346XXXXXXXX', '2024-04-09', 'enviado'),
-    (1, 'Alfredo', 'Landa', 'direccion AL', 'España', 'Pamplona', '+346XXXXXXXX', '2024-04-15', 'pendiente'),
-    (5, 'Nuria', 'Berenguer', 'direccion NB', 'España', 'Gerona', '+346XXXXXXXX', '2024-04-16', 'pendiente');
 
-INSERT INTO linea_facturacion (identidad_pedido, identidad_producto, cantidad) VALUES
-	(1, 1, 1),
-    (1, 8, 1),
-    (1, 13, 2),
-    (3, 26, 1),
-    (7, 6, 1),
-    (7, 20, 3);
+START TRANSACTION;
 
-/*Para comprobar que funciona bien el trigger del campo precio_linea al actualizar registro
-UPDATE linea_facturacion
-SET cantidad = 3  -- Asumiendo que 15.50 es el nuevo precio por unidad
-WHERE identidad_pedido = 3 AND identidad_producto = 26;*/
+INSERT INTO pedidos (identidad_usuario, nombre, apellidos, direccion, pais, ciudad, numero_telefono_movil, metodo_envio, fecha_pedido) VALUES
+    (1, 'Alfredo', 'Landa', 'direccion AL', 'España', 'Pamplona', '+346XXXXXXXX', 'Recogida_en_tienda', '2024-04-01');
+SET @identidad_pedido = LAST_INSERT_ID();
+INSERT INTO linea_facturacion (identidad_pedido, identidad_producto, cantidad) VALUES 
+	(@identidad_pedido, 2, 1),
+    (@identidad_pedido, 8, 1),
+    (@identidad_pedido, 13, 2);
+
+INSERT INTO pedidos (identidad_usuario, nombre, apellidos, direccion, pais, ciudad, numero_telefono_movil, metodo_envio, fecha_pedido) VALUES
+    (1, 'Alfredo', 'Landa', 'direccion AL', 'España', 'Pamplona', '+346XXXXXXXX', 'NACEX', '2024-04-01');
+SET @identidad_pedido = LAST_INSERT_ID();
+INSERT INTO linea_facturacion (identidad_pedido, identidad_producto, cantidad) VALUES 
+	(@identidad_pedido, 2, 1),
+    (@identidad_pedido, 8, 1),
+    (@identidad_pedido, 13, 2);
+
+INSERT INTO pedidos (identidad_usuario, nombre, apellidos, direccion, pais, ciudad, numero_telefono_movil, metodo_envio, fecha_pedido) VALUES
+    (3, 'Amparo', 'Baró', 'direccion AB', 'España', 'Barcelona', '+346XXXXXXXX', 'Recogida_en_tienda', '2024-04-02');
+SET @identidad_pedido = LAST_INSERT_ID();
+INSERT INTO linea_facturacion (identidad_pedido, identidad_producto, cantidad) VALUES 
+	(@identidad_pedido, 25, 1);
     
+INSERT INTO pedidos (identidad_usuario, nombre, apellidos, direccion, pais, ciudad, numero_telefono_movil, metodo_envio, fecha_pedido) VALUES
+    (3, 'Amparo', 'Baró', 'direccion AB', 'España', 'Barcelona', '+346XXXXXXXX', 'CTT_Express', '2024-04-03');
+SET @identidad_pedido = LAST_INSERT_ID();
+INSERT INTO linea_facturacion (identidad_pedido, identidad_producto, cantidad) VALUES 
+	(@identidad_pedido, 26, 2);
+
+INSERT INTO pedidos (identidad_usuario, nombre, apellidos, direccion, pais, ciudad, numero_telefono_movil, metodo_envio, fecha_pedido) VALUES
+    (1, 'Germán', 'Areta', 'direccion GA', 'España', 'Madrid', '+346XXXXXXXX', 'CTT_Express', '2024-04-04');
+SET @identidad_pedido = LAST_INSERT_ID();
+INSERT INTO linea_facturacion (identidad_pedido, identidad_producto, cantidad) VALUES 
+	(@identidad_pedido, 5, 2);
+
+INSERT INTO pedidos (identidad_usuario, nombre, apellidos, direccion, pais, ciudad, numero_telefono_movil, metodo_envio, fecha_pedido) VALUES
+    (8, 'Miguel', 'Aguirrezabala', 'direccion MA', 'España', 'Azpeitia', '+346XXXXXXXX', 'CTT_Express', '2024-04-05');
+SET @identidad_pedido = LAST_INSERT_ID();
+INSERT INTO linea_facturacion (identidad_pedido, identidad_producto, cantidad) VALUES 
+	(@identidad_pedido, 6, 2);
+
+INSERT INTO pedidos (identidad_usuario, nombre, apellidos, direccion, pais, ciudad, numero_telefono_movil, metodo_envio, fecha_pedido) VALUES
+    (5, 'Concepción', 'Velasco', 'direccion CV', 'España', 'Valladolid', '+346XXXXXXXX', 'CTT_Express', '2024-04-07');
+SET @identidad_pedido = LAST_INSERT_ID();
+INSERT INTO linea_facturacion (identidad_pedido, identidad_producto, cantidad) VALUES 
+	(@identidad_pedido, 6, 1),
+    (@identidad_pedido, 20, 3);
+    
+INSERT INTO pedidos (identidad_usuario, nombre, apellidos, direccion, pais, ciudad, numero_telefono_movil, metodo_envio, fecha_pedido) VALUES
+    (6, 'Ramiro', 'Pacheco', 'direccion RP', 'España', 'Madrid', '+346XXXXXXXX', 'CTT_Express', '2024-04-07');
+SET @identidad_pedido = LAST_INSERT_ID();
+INSERT INTO linea_facturacion (identidad_pedido, identidad_producto, cantidad) VALUES 
+	(@identidad_pedido, 10, 2),
+    (@identidad_pedido, 11, 2);
+
+INSERT INTO pedidos (identidad_usuario, nombre, apellidos, direccion, pais, ciudad, numero_telefono_movil, metodo_envio, fecha_pedido) VALUES
+    (7, 'Francisco', 'Rabal', 'direccion FR', 'España', 'Águilas', '+346XXXXXXXX', 'CTT_Express', '2024-04-09');
+SET @identidad_pedido = LAST_INSERT_ID();
+INSERT INTO linea_facturacion (identidad_pedido, identidad_producto, cantidad) VALUES 
+	(@identidad_pedido, 9, 3);
+
+INSERT INTO pedidos (identidad_usuario, nombre, apellidos, direccion, pais, ciudad, numero_telefono_movil, metodo_envio, fecha_pedido) VALUES
+    (1, 'Alfredo', 'Landa', 'direccion AL', 'España', 'Pamplona', '+346XXXXXXXX', 'CTT_Express', '2024-04-15');
+SET @identidad_pedido = LAST_INSERT_ID();
+INSERT INTO linea_facturacion (identidad_pedido, identidad_producto, cantidad) VALUES 
+	(@identidad_pedido, 10, 2);
+
+INSERT INTO pedidos (identidad_usuario, nombre, apellidos, direccion, pais, ciudad, numero_telefono_movil, metodo_envio, fecha_pedido) VALUES
+    (5, 'Nuria', 'Berenguer', 'direccion NB', 'España', 'Gerona', '+346XXXXXXXX', 'NACEX', '2024-04-16');
+SET @identidad_pedido = LAST_INSERT_ID();
+INSERT INTO linea_facturacion (identidad_pedido, identidad_producto, cantidad) VALUES 
+	(@identidad_pedido, 11, 1);
+
+COMMIT;
+	
 /*Recordar identidad_pedido es único*/
-INSERT INTO envios (identidad_pedido, fecha_envio, fecha_entrega, numero_documento_identidad_receptor, comentario) VALUES
-    (1, '2024-04-04', '2024-04-11', 'nif receptor', null),
-    (3, '2024-04-05', '2024-04-15', 'nif receptor', null),
-    (4, '2024-04-06', '2024-04-15', 'nif receptor', null),
-    (5, '2024-04-06', '2024-04-15', 'nif receptor', null),
-    (6, '2024-04-08', null, null, 'Tres intentos fallidos de entrega. Imposible contactar por teléfono. Devolvemos a almacén.'),
-    (7, '2024-04-10', '2024-04-17', 'nif receptor', null),
-    (8, '2024-04-13', null, null, null),
-    (9, '2024-04-13', null, null, null);
+INSERT INTO envios (identidad_pedido, fecha_envio) VALUES
+    (1, '2024-04-04'),
+    (3, '2024-04-05'),
+    (4, '2024-04-06'),
+    (5, '2024-04-06'),
+    (6, '2024-04-08'),
+    (7, '2024-04-10'),
+    (8, '2024-04-13'),
+    (9, '2024-04-13');
 
+/*UPDATE pedidos SET estado = 'cancelado' WHERE id_pedido = 2;
+UPDATE envios SET fecha_entrega = '2024-04-11', numero_documento_identidad_receptor = 'nif receptor' WHERE id_envio = 1;
+UPDATE envios SET fecha_entrega = '2024-04-15', numero_documento_identidad_receptor = 'nif receptor' WHERE id_envio = 2;
+UPDATE envios SET fecha_entrega = '2024-04-15', numero_documento_identidad_receptor = 'nif receptor' WHERE id_envio = 3;
+UPDATE envios SET fecha_entrega = '2024-04-15', numero_documento_identidad_receptor = 'nif receptor' WHERE id_envio= 4;
+UPDATE envios SET fecha_entrega = '2024-04-17', numero_documento_identidad_receptor = 'nif receptor' WHERE id_envio = 5;
+UPDATE envios SET fecha_entrega_vuelta_almacen = '2024-04-20', comentario = 'Tres intentos fallidos de entrega. Imposible contactar por teléfono. Devolvemos a almacén.' WHERE id_envio = 6;
+*/
 SELECT * FROM usuarios;
-SELECT * FROM pedidos;
-SELECT * FROM envios;
-SELECT * FROM linea_facturacion;
 SELECT * FROM productos;
-
+SELECT * FROM resenas;
+SELECT * FROM pedidos;
+SELECT * FROM linea_facturacion;
+SELECT * FROM envios;
 /*SELECT * FROM usuarios WHERE active = TRUE;*/
